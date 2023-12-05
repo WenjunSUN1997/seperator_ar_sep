@@ -24,7 +24,7 @@ def calcul_length(img_slice, direction):
         for index in range(img_slice.shape[0]):
             result += np.max(img_slice[index, :]) / 255
 
-        if result >= 0.7 * img_slice.shape[0]:
+        if result >= 0.6 * img_slice.shape[0]:
             return True
         else:
             return False
@@ -83,13 +83,23 @@ def analysis_seprator(img,  path):
 def split_image(image_pice: np.array,
                 direction):
     split_location = []
-    for index in tqdm(range(0, image_pice.shape[0], 10)):
-        img_slice = image_pice[index:index+60, :]
-        if calcul_length(img_slice, direction) and len(split_location)==0:
-            split_location.append(index)
-        elif calcul_length(img_slice, direction) and len(split_location)>0:
-            if index - split_location[-1] > 200:
+    if direction == 'shuiping':
+        for index in tqdm(range(0, image_pice.shape[0], 30)):
+
+                img_slice = image_pice[index:index+60, :]
+                if calcul_length(img_slice, direction) and len(split_location)==0:
+                    split_location.append(index)
+                elif calcul_length(img_slice, direction) and len(split_location)>0:
+                    if index - split_location[-1] > 200:
+                        split_location.append(index)
+    else:
+        for index in tqdm(range(0, image_pice.shape[1], 30)):
+            img_slice = image_pice[:, index:index + 60]
+            if calcul_length(img_slice, direction) and len(split_location) == 0:
                 split_location.append(index)
+            elif calcul_length(img_slice, direction) and len(split_location) > 0:
+                if index - split_location[-1] > 200:
+                    split_location.append(index)
 
     return split_location
 
@@ -135,6 +145,7 @@ def split_link(image_path:str):
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vert_k))
     verts = ~cv2.dilate(binary, kernel, iterations=1)
     borders = cv2.bitwise_or(hors, verts)
+    cv2.imwrite("temp/borders .png", borders)
     first_shuiping_split_points = split_image(borders, 'shuiping')
     first_shuiping_group = {'image_pieces': [],
                             'annotation': [],
@@ -169,12 +180,129 @@ def split_link(image_path:str):
             group_temp.append(annotation)
 
     first_shuiping_group['annotation'].append(group_temp)
+    # 开始第一次垂直分割
+    first_chuizhi_split = []
+    for index in range(len(first_shuiping_group['annotation'])):
+        result_piece = {'search': index,
+                        'image_pieces': [],
+                        'start_value': [],
+                        'annotation': []}
+        image_piece = first_shuiping_group['image_pieces'][index]
+        annotation_piece = first_shuiping_group['annotation'][index]
+        first_chuizhi_split_points = split_image(image_piece, 'chuizhi')
+        for index, value in enumerate(first_chuizhi_split_points):
+            group_temp = []
+            if index == 0:
+                result_piece['image_pieces'].append(image_piece[:, :value])
+                result_piece['start_value'].append([0, value])
+                for annotation in annotation_piece:
+                    if annotation['center'][0] <= value:
+                        group_temp.append(annotation)
+
+            elif index != 0 and index <= len(first_shuiping_split_points)-1:
+                result_piece['image_pieces'].append(
+                    image_piece[:, first_chuizhi_split_points[index-1]:value])
+                result_piece['start_value'].append([first_chuizhi_split_points[index-1], value])
+                for annotation in annotation_piece:
+                    if first_chuizhi_split_points[index-1] < annotation['center'][0] <= value:
+                        group_temp.append(annotation)
+
+            result_piece['image_pieces'].append(image_piece[:, first_chuizhi_split_points[-1]:])
+            result_piece['start_value'].append([first_chuizhi_split_points[-1], borders.shape[1]])
+            for annotation in annotation_piece:
+                if annotation['center'][0] >= first_chuizhi_split_points[-1]:
+                    group_temp.append(annotation)
+
+            result_piece['annotation'].append(group_temp)
+
+        first_chuizhi_split.append(result_piece)
+
+
+
 
     return
 
+def split_link_by_name(image_path:str):
+    links = []
+    xml_reader = XmlProcessor(0, image_path.replace('jpg', 'xml'))
+    annotation_list = xml_reader.get_annotation()
+    for annotation in annotation_list:
+        annotation['center'] = ([(x + y) / 2 for x, y in
+                                 zip(annotation['bbox'][0], annotation['bbox'][2])])
+    image = cv2.imread(image_path)
+    image_to_draw = Image.open(image_path).convert('RGB')
+    drawer = ImageDraw.Draw(image_to_draw, 'RGB')
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    ret, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+    cv2.imwrite("temp/gray.png", binary)
+    h, w = binary.shape
+    hors_k = int(math.sqrt(w) * 1.2)
+    vert_k = int(math.sqrt(h) * 1.2)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (hors_k, 1))
+    hors = ~cv2.dilate(binary, kernel, iterations=1)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vert_k))
+    verts = ~cv2.dilate(binary, kernel, iterations=1)
+    borders = cv2.bitwise_or(hors, verts)
+    cv2.imwrite("temp/borders .png", borders)
+    shuiping_all = [[0, 0, borders.shape[1], 0],
+                    [0, borders.shape[0], borders.shape[1], borders.shape[0]]]
+    chuizhi_all = [[0, 0, 0, borders.shape[0]],
+                   [borders.shape[1], 0, borders.shape[1], borders.shape[0]]]
+    whole_page_shuiping = split_image(borders, 'shuiping')
+    image_piece_after_whole_shuiping = []
+    for index, unit in enumerate(whole_page_shuiping):
+        shuiping_all.append([0, unit, borders.shape[1], unit])
+        if index == 0:
+            image_piece = borders[:unit, :]
+            bbox = [0, 0, borders.shape[1], unit]
+            image_piece_after_whole_shuiping.append({'image_piece': image_piece,
+                                                     'bbox': bbox})
+
+        elif index > 0 and index <= len(whole_page_shuiping)-1:
+            image_piece = borders[whole_page_shuiping[index-1]:unit, :]
+            bbox = [0, whole_page_shuiping[index-1], borders.shape[1], unit]
+            image_piece_after_whole_shuiping.append({'image_piece': image_piece,
+                                                     'bbox': bbox})
+
+    image_piece = borders[whole_page_shuiping[-1]:, :]
+    bbox = [0, whole_page_shuiping[-1], borders.shape[1], borders.shape[0]]
+    image_piece_after_whole_shuiping.append({'image_piece': image_piece,
+                                             'bbox': bbox})
+    # 第一次垂直分割
+    inter_result_1_chuizhi = []
+    for unit in image_piece_after_whole_shuiping:
+        seperator = split_image(unit['image_piece'], 'chuizhi')
+        for index, seperator_unit in enumerate(seperator):
+            chuizhi_all.append([seperator_unit,
+                                unit['bbox'][1],
+                                seperator_unit,
+                                unit['bbox'][3],])
+            if index == 0:
+                bbox = [0, unit['bbox'][1], seperator_unit, unit['bbox'][3]]
+                image_piece = unit['image_piece'][:, :seperator_unit]
+                inter_result_1_chuizhi.append({'bbox': bbox,
+                                               'image_piece': image_piece})
+            elif index > 0 and index <= len(seperator) - 1:
+                bbox = [seperator[index-1], unit['bbox'][1], seperator_unit, unit['bbox'][3]]
+                image_piece = unit['image_piece'][:, seperator[index-1]:seperator_unit]
+                inter_result_1_chuizhi.append({'bbox': bbox,
+                                               'image_piece': image_piece})
+
+        bbox = [seperator[-1], unit['bbox'][1],  borders.shape[1], unit['bbox'][3]]
+        image_piece = unit['image_piece'][:, seperator[-1]:]
+        inter_result_1_chuizhi.append({'bbox': bbox,
+                                       'image_piece': image_piece})
+    for x in inter_result_1_chuizhi:
+        drawer.rectangle(x['bbox'], outline='green', width=10)
+    image_to_draw.save("temp/first_chuizhi.png")
+
+    return
+
+
+
 if __name__ == "__main__":
     image_path = r'../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/576445_0003_23676257.jpg'
-    split_link(image_path)
+    split_link_by_name(image_path)
 
     # for unit in first_shuiping_group['annotation'][0]:
     #     drawer.rectangle(unit['bbox'][0] + unit['bbox'][2],
