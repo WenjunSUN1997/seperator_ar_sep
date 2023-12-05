@@ -5,11 +5,13 @@ import math
 from PIL import Image, ImageDraw
 import math
 import os
-import seaborn as sns
+from ast import literal_eval
+from article_segmentation.sep_tool.xml_reader import XmlProcessor
 
-def calcul_length(img_slice):
+def calcul_length(img_slice, direction):
     result = 0
-    if img_slice.shape[0] < img_slice.shape[1]:
+    # if img_slice.shape[0] < img_slice.shape[1]:
+    if direction == 'shuiping':
         for index in range(img_slice.shape[1]):
             result += np.max(img_slice[:, index]) / 255
         # return result
@@ -37,9 +39,9 @@ def analysis_seprator(img,  path):
     # shuipingfenxi
     for index in tqdm(range(0, img.shape[0], 10)):
         img_slice = img[index:index+60, :]
-        if calcul_length(img_slice) and len(shuiping_result)==0:
+        if calcul_length(img_slice, None) and len(shuiping_result)==0:
             shuiping_result.append(index)
-        if calcul_length(img_slice) and len(shuiping_result)!=0:
+        if calcul_length(img_slice, None) and len(shuiping_result)!=0:
             if index - shuiping_result[-1] > 200:
                 shuiping_result.append(index)
 
@@ -64,7 +66,7 @@ def analysis_seprator(img,  path):
         part = shuiping_split[group_index]
         for index_2 in tqdm(range(0, part.shape[1], 10)):
             img_slice = part[:, index_2:index_2+60]
-            if calcul_length(img_slice):
+            if calcul_length(img_slice, None):
                 temp.append(index_2)
 
         chuizhi_result.append(temp)
@@ -77,6 +79,19 @@ def analysis_seprator(img,  path):
     img_draw.save('temp/argo.png')
     print()
     pass
+
+def split_image(image_pice: np.array,
+                direction):
+    split_location = []
+    for index in tqdm(range(0, image_pice.shape[0], 10)):
+        img_slice = image_pice[index:index+60, :]
+        if calcul_length(img_slice, direction) and len(split_location)==0:
+            split_location.append(index)
+        elif calcul_length(img_slice, direction) and len(split_location)>0:
+            if index - split_location[-1] > 200:
+                split_location.append(index)
+
+    return split_location
 
 def mopho(path=r'sep_dataset/test/fi/images/576464_0003_23676343.jpg'):
     image = cv2.imread(path)
@@ -99,5 +114,74 @@ def mopho(path=r'sep_dataset/test/fi/images/576464_0003_23676343.jpg'):
 
     print()
 
+def split_link(image_path:str):
+    links = []
+    xml_reader = XmlProcessor(0, image_path.replace('jpg', 'xml'))
+    annotation_list = xml_reader.get_annotation()
+    for annotation in annotation_list:
+        annotation['center'] = ([(x + y) / 2 for x, y in
+                                 zip(annotation['bbox'][0], annotation['bbox'][2])])
+    image = cv2.imread(image_path)
+    image_to_draw = Image.open(image_path).convert('RGB')
+    drawer = ImageDraw.Draw(image_to_draw, 'RGB')
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    ret, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+    cv2.imwrite("temp/gray.png", binary)
+    h, w = binary.shape
+    hors_k = int(math.sqrt(w) * 1.2)
+    vert_k = int(math.sqrt(h) * 1.2)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (hors_k, 1))
+    hors = ~cv2.dilate(binary, kernel, iterations=1)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vert_k))
+    verts = ~cv2.dilate(binary, kernel, iterations=1)
+    borders = cv2.bitwise_or(hors, verts)
+    first_shuiping_split_points = split_image(borders, 'shuiping')
+    first_shuiping_group = {'image_pieces': [],
+                            'annotation': [],
+                            'start_value': []}
+    for index, value in enumerate(first_shuiping_split_points):
+        group_temp = []
+        if index == 0:
+            first_shuiping_group['start_value'].append([0, value])
+            first_shuiping_group['image_pieces'].append(borders[:value, :])
+            for annotation in annotation_list:
+                if annotation['center'][1] <= value:
+                    group_temp.append(annotation)
+
+        elif index != 0 and index <= len(first_shuiping_split_points)-1:
+            first_shuiping_group['start_value'].append(
+                [first_shuiping_split_points[index-1], value])
+            first_shuiping_group['image_pieces'].append(
+                borders[first_shuiping_split_points[index-1]:value, :])
+            for annotation in annotation_list:
+                if annotation['center'][1] <= value and \
+                        annotation['center'][1] > first_shuiping_split_points[index-1]:
+                    group_temp.append(annotation)
+
+        first_shuiping_group['annotation'].append(group_temp)
+
+    first_shuiping_group['image_pieces'].append(borders[first_shuiping_split_points[-1]:, :])
+    first_shuiping_group['start_value'].append(
+        [first_shuiping_split_points[-1], image.shape[0]])
+    group_temp = []
+    for annotation in annotation_list:
+        if annotation['center'][1] >= first_shuiping_split_points[-1]:
+            group_temp.append(annotation)
+
+    first_shuiping_group['annotation'].append(group_temp)
+
+    return
+
 if __name__ == "__main__":
-    mopho()
+    image_path = r'../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/576445_0003_23676257.jpg'
+    split_link(image_path)
+
+    # for unit in first_shuiping_group['annotation'][0]:
+    #     drawer.rectangle(unit['bbox'][0] + unit['bbox'][2],
+    #                      outline='red',
+    #                      width=10)
+    # for unit in first_shuiping_group['annotation'][1]:
+    #     drawer.rectangle(unit['bbox'][0] + unit['bbox'][2],
+    #                      outline='green',
+    #                      width=10)
+    # image_to_draw.save('temp/group.png')
