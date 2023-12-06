@@ -103,6 +103,10 @@ def split_image(image_pice: np.array,
 
     return split_location
 
+def remove_elements_by_indices(lst, indices):
+    indices_set = set(indices)  # 将索引列表转换为集合，提高查找效率
+    return [element for index, element in enumerate(lst) if index not in indices_set]
+
 def mopho(path=r'sep_dataset/test/fi/images/576464_0003_23676343.jpg'):
     image = cv2.imread(path)
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -222,6 +226,45 @@ def split_link(image_path:str):
 
     return
 
+def judge_adjacent(center, chuizhi, shuiping):
+    left = 0
+    right = 0
+    top = 0
+    bottom = 0
+#     寻找left
+    mini = 1000000
+    for key, value in chuizhi.items():
+        if value[1] <= center[1] and value[3] >= center[1]:
+            distance = center[0] - value[0]
+            if distance <= mini and distance > 0:
+                left = key
+
+#     寻找right
+    mini = 1000000
+    for key, value in chuizhi.items():
+        if value[1] <= center[1] and value[3] >= center[1]:
+            distance = value[0] - center[0]
+            if distance <= mini and distance > 0:
+                right = key
+
+#     寻找top
+    mini = 1000000
+    for key, value in shuiping.items():
+        if value[0] <= center[0] and value[2] >= center[0]:
+            distance = center[1] - value[1]
+            if distance <= mini and distance > 0:
+                top = key
+
+#     寻找bottom
+    mini = 1000000
+    for key, value in shuiping.items():
+        if value[0] <= center[0] and value[2] >= center[0]:
+            distance = value[1] - center[1]
+            if distance <= mini and distance > 0:
+                bottom = key
+
+    return (left, right, top, bottom)
+
 def split_link_by_name(image_path:str):
     links = []
     xml_reader = XmlProcessor(0, image_path.replace('jpg', 'xml'))
@@ -277,14 +320,14 @@ def split_link_by_name(image_path:str):
     inter_result_1_chuizhi = []
     for unit in image_piece_after_whole_shuiping:
         seperator = split_image(unit['image_piece'], 'chuizhi')
-        if len(seperator) == 0:
+        if len(seperator) == 0 or (len(seperator)==0 and seperator[0]==0):
             continue
 
         for index, seperator_unit in enumerate(seperator):
             chuizhi_all.append([seperator_unit,
                                 unit['bbox'][1],
                                 seperator_unit,
-                                unit['bbox'][3],])
+                                unit['bbox'][3]])
             if index == 0:
                 bbox = [0, unit['bbox'][1], seperator_unit, unit['bbox'][3]]
                 image_piece = unit['image_piece'][:, :seperator_unit]
@@ -344,7 +387,7 @@ def split_link_by_name(image_path:str):
     #     二次垂直分割
     for unit in inter_result_1_shuiping:
         chuizhi_seprator = split_image(unit['image_piece'], 'chuizhi')
-        if len(chuizhi_seprator) == 0:
+        if len(chuizhi_seprator) == 0 or (len(chuizhi_seprator)==0 and chuizhi_seprator[0]==0):
             continue
 
         for chuizhi_seprator_unit in chuizhi_seprator:
@@ -352,20 +395,73 @@ def split_link_by_name(image_path:str):
                                 unit['bbox'][1],
                                 unit['bbox'][0]+chuizhi_seprator_unit,
                                 unit['bbox'][3]])
+    # 二次分割完成， 开始后续处理
+    final_chuizhi_all = []
+    while len(chuizhi_all) > 0:
+        index_remove = [0]
+        for index in range(1, len(chuizhi_all)):
+            if abs(chuizhi_all[index][0] - chuizhi_all[0][0]) < 80:
+                index_remove.append(index)
 
-    for x in chuizhi_all:
+        length = [abs(chuizhi_all[x][1] - chuizhi_all[x][3]) for x in index_remove]
+        max_index = length.index(max(length))
+        final_chuizhi_all.append(chuizhi_all[index_remove[max_index]])
+        chuizhi_all = remove_elements_by_indices(chuizhi_all, index_remove)
+
+    final_shuiping_all = []
+    while len(shuiping_all) > 0:
+        index_remove = [0]
+        for index in range(1, len(shuiping_all)):
+            if abs(shuiping_all[index][1] - shuiping_all[0][1]) < 80:
+                index_remove.append(index)
+
+        length = [abs(shuiping_all[x][0] - shuiping_all[x][2]) for x in index_remove]
+        max_index = length.index(max(length))
+        final_shuiping_all.append(shuiping_all[index_remove[max_index]])
+        shuiping_all = remove_elements_by_indices(shuiping_all, index_remove)
+
+    index_remove = []
+    for index in range(len(final_chuizhi_all)):
+        if final_chuizhi_all[index][0] == final_chuizhi_all[index][2] \
+                and final_chuizhi_all[index][1] == final_chuizhi_all[index][3]:
+            index_remove.append(index)
+
+    final_chuizhi_all = remove_elements_by_indices(final_chuizhi_all, index_remove)
+    for x in final_chuizhi_all:
         drawer.line(x, 'green', width=10)
 
-    for x in shuiping_all:
+    for x in final_shuiping_all:
         drawer.line(x, 'red', width=10)
 
     image_to_draw.save("temp/final_lines.png")
+    final_chuizhi_all = {index: value for index, value in enumerate(final_chuizhi_all)}
+    final_shuiping_all = {index: value for index, value in enumerate(final_shuiping_all)}
+    # 开始为各个annotation分配边
+    for annotation in annotation_list:
+        annotation['sign'] = judge_adjacent(annotation['center'],
+                                            final_chuizhi_all,
+                                            final_shuiping_all)
+    # 按照边进行分组
+    sign_set = set(x['sign'] for x in annotation_list)
+    for index, sign in enumerate(sign_set):
+        if index % 2 == 0:
+            outline = 'red'
+        else:
+            outline = 'green'
+        for annotation in annotation_list:
+            if annotation['sign'] == sign:
+                drawer.rectangle(annotation['bbox'][0]+annotation['bbox'][2],
+                                 outline=outline,
+                                 width=4)
+
+    image_to_draw.save("temp/final_group.png")
+
     return
 
 
 
 if __name__ == "__main__":
-    image_path = r'../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/576458_0004_23676319.jpg'
+    image_path = r'../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/576462_0001_23676323.jpg'
     split_link_by_name(image_path)
 
     # for unit in first_shuiping_group['annotation'][0]:
