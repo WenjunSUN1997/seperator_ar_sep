@@ -24,7 +24,7 @@ def calcul_length(img_slice, direction):
         for index in range(img_slice.shape[0]):
             result += np.max(img_slice[index, :]) / 255
 
-        if result >= 0.6 * img_slice.shape[0]:
+        if result >= 0.75 * img_slice.shape[0]:
             return True
         else:
             return False
@@ -264,14 +264,22 @@ def split_link_by_name(image_path:str):
             image_piece_after_whole_shuiping.append({'image_piece': image_piece,
                                                      'bbox': bbox})
 
-    image_piece = borders[whole_page_shuiping[-1]:, :]
-    bbox = [0, whole_page_shuiping[-1], borders.shape[1], borders.shape[0]]
+    if len(whole_page_shuiping) > 0:
+        image_piece = borders[whole_page_shuiping[-1]:, :]
+        bbox = [0, whole_page_shuiping[-1], borders.shape[1], borders.shape[0]]
+    else:
+        image_piece = borders[:, :]
+        bbox = [0, 0, borders.shape[1], borders.shape[0]]
+
     image_piece_after_whole_shuiping.append({'image_piece': image_piece,
                                              'bbox': bbox})
     # 第一次垂直分割
     inter_result_1_chuizhi = []
     for unit in image_piece_after_whole_shuiping:
         seperator = split_image(unit['image_piece'], 'chuizhi')
+        if len(seperator) == 0:
+            continue
+
         for index, seperator_unit in enumerate(seperator):
             chuizhi_all.append([seperator_unit,
                                 unit['bbox'][1],
@@ -292,16 +300,72 @@ def split_link_by_name(image_path:str):
         image_piece = unit['image_piece'][:, seperator[-1]:]
         inter_result_1_chuizhi.append({'bbox': bbox,
                                        'image_piece': image_piece})
-    for x in inter_result_1_chuizhi:
-        drawer.rectangle(x['bbox'], outline='green', width=10)
-    image_to_draw.save("temp/first_chuizhi.png")
+    # for x in inter_result_1_chuizhi:
+    #     drawer.rectangle(x['bbox'], outline='green', width=10)
+    # image_to_draw.save("temp/first_chuizhi.png")
+    # 二次水平分割
+    inter_result_1_shuiping = []
+    for unit in inter_result_1_chuizhi:
+        shuiping_seprator = split_image(unit['image_piece'], 'shuiping')
+        if len(shuiping_seprator) == 0:
+            continue
 
+        for index, seperator_unit in enumerate(shuiping_seprator):
+            shuiping_all.append([unit['bbox'][0],
+                                 unit['bbox'][1]+seperator_unit,
+                                 unit['bbox'][2],
+                                 unit['bbox'][1]+seperator_unit])
+            if index == 0:
+                image_piece = unit['image_piece'][:seperator_unit, :]
+                bbox = [unit['bbox'][0],
+                        unit['bbox'][1],
+                        unit['bbox'][2],
+                        unit['bbox'][1]+seperator_unit]
+                inter_result_1_shuiping.append({'bbox': bbox,
+                                                'image_piece': image_piece})
+
+            elif index != 0 and index <= len(shuiping_seprator) - 1:
+                image_piece = unit['image_piece'][shuiping_seprator[index-1]:shuiping_seprator[index], :]
+                bbox = [unit['bbox'][0],
+                        unit['bbox'][1]+shuiping_seprator[index-1],
+                        unit['bbox'][2],
+                        unit['bbox'][1]+shuiping_seprator[index]]
+                inter_result_1_shuiping.append({'bbox': bbox,
+                                                'image_piece': image_piece})
+
+        bbox = [unit['bbox'][0],
+                unit['bbox'][1]+shuiping_seprator[-1],
+                unit['bbox'][2],
+                unit['bbox'][3]]
+        image_piece = unit['image_piece'][shuiping_seprator[-1]:, :]
+        inter_result_1_shuiping.append({'bbox': bbox,
+                                        'image_piece': image_piece})
+
+    #     二次垂直分割
+    for unit in inter_result_1_shuiping:
+        chuizhi_seprator = split_image(unit['image_piece'], 'chuizhi')
+        if len(chuizhi_seprator) == 0:
+            continue
+
+        for chuizhi_seprator_unit in chuizhi_seprator:
+            chuizhi_all.append([unit['bbox'][0]+chuizhi_seprator_unit,
+                                unit['bbox'][1],
+                                unit['bbox'][0]+chuizhi_seprator_unit,
+                                unit['bbox'][3]])
+
+    for x in chuizhi_all:
+        drawer.line(x, 'green', width=10)
+
+    for x in shuiping_all:
+        drawer.line(x, 'red', width=10)
+
+    image_to_draw.save("temp/final_lines.png")
     return
 
 
 
 if __name__ == "__main__":
-    image_path = r'../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/576445_0003_23676257.jpg'
+    image_path = r'../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/576458_0004_23676319.jpg'
     split_link_by_name(image_path)
 
     # for unit in first_shuiping_group['annotation'][0]:
