@@ -221,9 +221,6 @@ def split_link(image_path:str):
 
         first_chuizhi_split.append(result_piece)
 
-
-
-
     return
 
 def judge_adjacent(center, chuizhi, shuiping):
@@ -234,36 +231,43 @@ def judge_adjacent(center, chuizhi, shuiping):
 #     寻找left
     mini = 1000000
     for key, value in chuizhi.items():
-        if value[1] <= center[1] and value[3] >= center[1]:
+        if value[1] < center[1] and value[3] > center[1] and value[0] < center[0]:
             distance = center[0] - value[0]
-            if distance <= mini and distance > 0:
+            if distance < mini:
+                mini = distance
                 left = key
 
 #     寻找right
     mini = 1000000
     for key, value in chuizhi.items():
-        if value[1] <= center[1] and value[3] >= center[1]:
+        if value[1] < center[1] and value[3] > center[1] and value[0] > center[0]:
             distance = value[0] - center[0]
-            if distance <= mini and distance > 0:
+            if distance < mini:
+                mini = distance
                 right = key
 
 #     寻找top
     mini = 1000000
     for key, value in shuiping.items():
-        if value[0] <= center[0] and value[2] >= center[0]:
+        if value[0] < center[0] and value[2] > center[0] and center[1] > value[1]:
             distance = center[1] - value[1]
-            if distance <= mini and distance > 0:
+            if distance < mini:
+                mini = distance
                 top = key
 
 #     寻找bottom
     mini = 1000000
     for key, value in shuiping.items():
-        if value[0] <= center[0] and value[2] >= center[0]:
+        if value[0] < center[0] and value[2] > center[0] and center[1] < value[1]:
             distance = value[1] - center[1]
-            if distance <= mini and distance > 0:
+            if distance < mini:
+                mini = distance
                 bottom = key
 
     return (left, right, top, bottom)
+
+def link_block(annotation_group):
+    pass
 
 def split_link_by_name(image_path:str):
     links = []
@@ -427,11 +431,13 @@ def split_link_by_name(image_path:str):
             index_remove.append(index)
 
     final_chuizhi_all = remove_elements_by_indices(final_chuizhi_all, index_remove)
-    for x in final_chuizhi_all:
+    for index, x in enumerate(final_chuizhi_all):
         drawer.line(x, 'green', width=10)
+        drawer.text((x[0], x[1]), str(index))
 
-    for x in final_shuiping_all:
+    for index, x in enumerate(final_shuiping_all):
         drawer.line(x, 'red', width=10)
+        drawer.text((x[0], x[1]), str(index))
 
     image_to_draw.save("temp/final_lines.png")
     final_chuizhi_all = {index: value for index, value in enumerate(final_chuizhi_all)}
@@ -453,8 +459,18 @@ def split_link_by_name(image_path:str):
                 drawer.rectangle(annotation['bbox'][0]+annotation['bbox'][2],
                                  outline=outline,
                                  width=4)
+                drawer.text(annotation['center'], str(annotation['sign']))
 
     image_to_draw.save("temp/final_group.png")
+    groups = []
+    for index, sign in enumerate(sign_set):
+        temp = []
+        for annotation in annotation_list:
+            if annotation['sign'] == sign:
+                temp.append(annotation)
+
+        groups.append(temp)
+
 
     return
 
