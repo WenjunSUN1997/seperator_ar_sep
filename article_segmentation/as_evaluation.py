@@ -149,7 +149,6 @@ def evalArticleErrorScore(predArticleBlockDict,groundTruthArticleBlockDict):
     return AES,meanAES
 
 def evaluate(prediction, truth):
-    error_value_list = []
     if len(prediction) < len(truth):
         prediction = prediction + [[]]*(len(truth)-len(prediction))
     else:
@@ -162,22 +161,7 @@ def evaluate(prediction, truth):
             bingji = set(truth_value + pre_value)
             error_list[truth_index][pre_index] = len(bingji-jiaoji) / len(bingji)
 
-    error_value_list = remove_min(error_list)
+    error_value_list = np.min(error_list, axis=1)
     return error_value_list
 
-def remove_min(matrix):
-    min_values = []  # 保存每次得到的最小值
-    while matrix.size > 0:
-        min_val = np.min(matrix)  # 找到矩阵中的最小值
-        min_values.append(min_val)  # 将最小值添加到列表中
-
-        min_indices = np.argwhere(matrix == min_val)  # 找到最小值所在的位置
-        if len(min_indices) == 0:
-            break
-
-        min_row, min_col = min_indices[0]
-        matrix = np.delete(matrix, min_row, axis=0)  # 移除行
-        matrix = np.delete(matrix, min_col, axis=1)  # 移除列
-
-    return min_values  # 返回所有最小值的列表
 

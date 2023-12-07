@@ -470,7 +470,7 @@ def split_link_by_name(image_path:str, save_path):
         groups.append(temp)
 
     for group_unit in groups:
-        group_unit = sorted(group_unit, key=lambda x: (x['center'][0], x['center'][1]))
+        group_unit = sorted(group_unit, key=lambda x: (x['center'][0] // 200, x['center'][1]))
         for index in range(len(group_unit) - 1):
             links.append([group_unit[index]['index'],
                           group_unit[index+1]['index']])
