@@ -1,12 +1,13 @@
+import os
+
 import cv2
 import numpy as np
 from tqdm import tqdm
-import math
 from PIL import Image, ImageDraw
 import math
-import os
-from ast import literal_eval
-from article_segmentation.sep_tool.xml_reader import XmlProcessor
+import networkx as nx
+from xml_reader import XmlProcessor
+import pickle
 
 def calcul_length(img_slice, direction):
     result = 0
@@ -24,7 +25,7 @@ def calcul_length(img_slice, direction):
         for index in range(img_slice.shape[0]):
             result += np.max(img_slice[index, :]) / 255
 
-        if result >= 0.75 * img_slice.shape[0]:
+        if result >= 0.7 * img_slice.shape[0]:
             return True
         else:
             return False
@@ -84,7 +85,7 @@ def split_image(image_pice: np.array,
                 direction):
     split_location = []
     if direction == 'shuiping':
-        for index in tqdm(range(0, image_pice.shape[0], 30)):
+        for index in range(0, image_pice.shape[0], 30):
 
                 img_slice = image_pice[index:index+60, :]
                 if calcul_length(img_slice, direction) and len(split_location)==0:
@@ -93,7 +94,7 @@ def split_image(image_pice: np.array,
                     if index - split_location[-1] > 200:
                         split_location.append(index)
     else:
-        for index in tqdm(range(0, image_pice.shape[1], 30)):
+        for index in range(0, image_pice.shape[1], 30):
             img_slice = image_pice[:, index:index + 60]
             if calcul_length(img_slice, direction) and len(split_location) == 0:
                 split_location.append(index)
@@ -266,10 +267,7 @@ def judge_adjacent(center, chuizhi, shuiping):
 
     return (left, right, top, bottom)
 
-def link_block(annotation_group):
-    pass
-
-def split_link_by_name(image_path:str):
+def split_link_by_name(image_path:str, save_path):
     links = []
     xml_reader = XmlProcessor(0, image_path.replace('jpg', 'xml'))
     annotation_list = xml_reader.get_annotation()
@@ -281,7 +279,7 @@ def split_link_by_name(image_path:str):
     drawer = ImageDraw.Draw(image_to_draw, 'RGB')
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     ret, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
-    cv2.imwrite("temp/gray.png", binary)
+    # cv2.imwrite("temp/gray.png", binary)
     h, w = binary.shape
     hors_k = int(math.sqrt(w) * 1.2)
     vert_k = int(math.sqrt(h) * 1.2)
@@ -290,7 +288,7 @@ def split_link_by_name(image_path:str):
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vert_k))
     verts = ~cv2.dilate(binary, kernel, iterations=1)
     borders = cv2.bitwise_or(hors, verts)
-    cv2.imwrite("temp/borders .png", borders)
+    cv2.imwrite(save_path+"borders .png", borders)
     shuiping_all = [[0, 0, borders.shape[1], 0],
                     [0, borders.shape[0], borders.shape[1], borders.shape[0]]]
     chuizhi_all = [[0, 0, 0, borders.shape[0]],
@@ -439,7 +437,7 @@ def split_link_by_name(image_path:str):
         drawer.line(x, 'red', width=10)
         drawer.text((x[0], x[1]), str(index))
 
-    image_to_draw.save("temp/final_lines.png")
+    image_to_draw.save(save_path+"final_lines.png")
     final_chuizhi_all = {index: value for index, value in enumerate(final_chuizhi_all)}
     final_shuiping_all = {index: value for index, value in enumerate(final_shuiping_all)}
     # 开始为各个annotation分配边
@@ -461,7 +459,7 @@ def split_link_by_name(image_path:str):
                                  width=4)
                 drawer.text(annotation['center'], str(annotation['sign']))
 
-    image_to_draw.save("temp/final_group.png")
+    # image_to_draw.save(save_path+"final_group.png")
     groups = []
     for index, sign in enumerate(sign_set):
         temp = []
@@ -471,14 +469,59 @@ def split_link_by_name(image_path:str):
 
         groups.append(temp)
 
+    for group_unit in groups:
+        group_unit = sorted(group_unit, key=lambda x: (x['center'][0], x['center'][1]))
+        for index in range(len(group_unit) - 1):
+            links.append([group_unit[index]['index'],
+                          group_unit[index+1]['index']])
 
+    for chuizhi_line_index in range(len(final_chuizhi_all)):
+        left_block = [x for x in annotation_list
+                      if x['sign'][1] == chuizhi_line_index]
+        try:
+            mini_left = max(left_block, key=lambda x: x['center'][1])
+        except:
+            continue
+
+        right_block = [x for x in annotation_list
+                       if x['sign'][0] == chuizhi_line_index]
+        try:
+            mini_right = min(right_block, key=lambda x: x['center'][1])
+        except:
+            continue
+
+        links.append([mini_left['index'], mini_right['index']])
+
+    # 开始链接
+    for link_unit in links:
+        start_point = [x['center'] for x in annotation_list if x['index'] == link_unit[0]]
+        end_point = [x['center'] for x in annotation_list if x['index'] == link_unit[1]]
+        drawer.line(start_point[0] + end_point[0],
+                    'red',
+                    width=8)
+
+    image_to_draw.save(save_path+'final_link.png')
+    precit_nx = nx.Graph()
+    precit_nx.add_nodes_from([(annotation['index'], annotation) for annotation in annotation_list])
+    precit_nx.add_edges_from([(x[0], x[1]) for x in links])
+    pickle.dump(precit_nx, open(save_path+'nx.nx', 'wb'))
     return
 
-
-
 if __name__ == "__main__":
-    image_path = r'../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/576462_0001_23676323.jpg'
-    split_link_by_name(image_path)
+    error = 0
+    save_path = 'result/'
+    os.makedirs(save_path, exist_ok=True)
+    image_path_list = [x for x in os.listdir('../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/')
+                       if '.jpg' in x]
+    for image_path in tqdm(image_path_list):
+        os.makedirs(save_path+image_path.replace('.jpg', '/'), exist_ok=True)
+        try:
+            split_link_by_name(image_path='../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/'+image_path,
+                               save_path=save_path+image_path.replace('.jpg', '/'))
+        except:
+            os.removedirs(save_path+image_path.replace('.jpg', '/'))
+            error += 1
+            print(error)
 
     # for unit in first_shuiping_group['annotation'][0]:
     #     drawer.rectangle(unit['bbox'][0] + unit['bbox'][2],

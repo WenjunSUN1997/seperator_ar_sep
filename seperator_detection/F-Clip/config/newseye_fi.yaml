@@ -1,0 +1,33 @@
+io:
+  logdir: logs/
+  dataname: shanghaiTech
+  datadir: /data/wsun01/F-Clip/data/fi  # /home/dxl/Data/wireframe     wireframe1_datarota_3w
+  num_workers: 4
+  tensorboard_port: 0
+  validation_interval: 2000
+  visual_num: 6
+  resume_from:  # ckpt path when the program was stopped by accident
+  model_initialize_file: /data/wsun01/F-Clip/data/checkpoint.pth.tar
+#  /data/wsun01/F-Clip/data/checkpoint.pth.tar
+
+
+model:
+  # backbone parameters
+  backbone: hourglass_lines  # stacked_hourglass, hourglass_lines
+  depth: 4
+  num_stacks: 2
+  num_blocks: 1
+  inplanes: 64
+  branch_blocks: [BottleneckLine]  # Bottleneck2D, Bottleneck1D_v, Bottleneck1D_h， Bottleneck2D_c, BottleneckLine
+  line_kernel: 7
+  nlines: 10
+  line:
+    mode: [v, h]
+  merge: 'maxpool'  # 'cat', 'maxpool'
+
+optim:
+  lr: 2.0e-5
+  max_epoch: 2200
+  weight_decay: 1.0e-4
+  lr_decay_epoch: [160,2000]
+
