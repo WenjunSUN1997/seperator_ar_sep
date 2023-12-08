@@ -2,9 +2,10 @@ import networkx as nx
 from as_evaluation import evaluate
 import os
 import pickle
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel, LlamaModel
 import argparse
 import torch
+from tqdm import tqdm
 
 def post_process_net(predict_net: nx.Graph):
     node_list = [x[1]['index'] for x in predict_net.nodes().data()]
@@ -60,30 +61,47 @@ def benchmark(file_path, tokenizer, model, threshold, type, device):
 
             for key, value in output_tokenizer_2.items():
                 output_tokenizer_2[key] = value.to(device)
+
+            if isinstance(model, LlamaModel):
+                real_token = output_tokenizer_1['attention_mask'] != 0
+                for key, value in output_tokenizer_1.items():
+                    output_tokenizer_1[key] = value[real_token]
+
+                real_token = output_tokenizer_2['attention_mask'] != 0
+                for key, value in output_tokenizer_2.items():
+                    output_tokenizer_2[key] = value[real_token]
+
             if type == 'mean':
                 semantic_1 = torch.mean(model(**output_tokenizer_1)['last_hidden_state'], dim=1)
                 semantic_2 = torch.mean(model(**output_tokenizer_2)['last_hidden_state'], dim=1)
-                if torch.cosine_similarity(semantic_1, semantic_2, dim=-1) < threshold:
-                    predict_net.remove_edge(edge[0], edge[1])
+            else:
+                semantic_1 = model(**output_tokenizer_1)['last_hidden_state'][:, -1, :]
+                semantic_2 = model(**output_tokenizer_2)['last_hidden_state'][:, -1, :]
+
+            if torch.cosine_similarity(semantic_1, semantic_2, dim=-1) < threshold:
+                predict_net.remove_edge(edge[0], edge[1])
+                # print('remove')
 
         return post_process_net(predict_net)
 
     file_list = os.listdir(file_path)
     aer_list = []
     acr_list = []
-    for file_name in file_list:
+    for file_name in tqdm(file_list):
         with open(file_path + file_name + '/' + 'nx.nx', 'rb') as file:
             predict_net = pickle.load(file)
 
         aer_list = aer_list + analysis_single_page(predict_net)
         acr_list = acr_list + [1-x for x in aer_list]
 
+    print('macs: ', sum(acr_list) / len(acr_list))
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", default='cuda:2')
     parser.add_argument("--file_path", default=r'../seperator_detection/result/')
     parser.add_argument("--model_name", default='dbmdz/bert-base-historic-multilingual-cased')
-    parser.add_argument("--threshold", default=0.0, type=float)
+    parser.add_argument("--threshold", default=0.5, type=float)
     parser.add_argument("--type", default='mean', choices=['mean', 'end'])
     args = parser.parse_args()
     device = args.device
@@ -96,6 +114,7 @@ if __name__ == "__main__":
         model = AutoModel.from_pretrained(model_name)
     else:
         model = AutoModel.from_pretrained(model_name).bfloat16()
+        tokenizer.pad_token = tokenizer.eos_token
 
     input_args = {'file_path': file_path,
                   'tokenizer': tokenizer,
