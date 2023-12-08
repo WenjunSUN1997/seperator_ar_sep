@@ -6,6 +6,7 @@ from transformers import AutoTokenizer, AutoModel, LlamaModel
 import argparse
 import torch
 from tqdm import tqdm
+from sklearn import metrics
 
 def post_process_net(predict_net: nx.Graph):
     node_list = [x[1]['index'] for x in predict_net.nodes().data()]
@@ -32,8 +33,29 @@ def post_process_net(predict_net: nx.Graph):
         for value in temp:
             node_list.remove(value)
 
-    error_value_list = evaluate(prediction, truth).tolist()
-    return error_value_list
+    node_list = [x[1]['index'] for x in predict_net.nodes().data()]
+    prediction_clustering = []
+    truth_clustering = []
+    for node in node_list:
+        for prediction_index, prediction_unit in enumerate(prediction):
+            if node in prediction_unit:
+                prediction_clustering.append(prediction_index)
+
+        for truth_index, truth_unit in enumerate(truth):
+            if node in truth_unit:
+                truth_clustering.append(truth_index)
+
+    ari = [metrics.adjusted_rand_score(truth_clustering, prediction_clustering)]
+    nmi = [metrics.normalized_mutual_info_score(truth_clustering, prediction_clustering)]
+    homo = [metrics.homogeneity_score(truth_clustering, prediction_clustering)]
+    evaluation_result = evaluate(prediction, truth)
+    error_value_list = evaluation_result['error_value_list'].tolist()
+    ppa = evaluation_result['ppa']
+    return {'ari': ari,
+            'nmi': nmi,
+            'homo': homo,
+            'error_value_list': error_value_list,
+            'ppa': ppa}
 
 
 def benchmark(file_path, tokenizer, model, threshold, type, device):
@@ -87,14 +109,28 @@ def benchmark(file_path, tokenizer, model, threshold, type, device):
     file_list = os.listdir(file_path)
     aer_list = []
     acr_list = []
+    ari = []
+    nmi = []
+    homo = []
+    ppa = []
+
     for file_name in tqdm(file_list):
         with open(file_path + file_name + '/' + 'nx.nx', 'rb') as file:
             predict_net = pickle.load(file)
 
-        aer_list = aer_list + analysis_single_page(predict_net)
+        performance = analysis_single_page(predict_net)
+        aer_list = aer_list + performance['error_value_list']
         acr_list = acr_list + [1-x for x in aer_list]
+        ari += performance['ari']
+        nmi += performance['nmi']
+        homo += performance['homo']
+        ppa += performance['ppa']
 
     print('macs: ', sum(acr_list) / len(acr_list))
+    print('ppa: ', sum(ppa) / len(ppa))
+    print('ari: ', sum(ari) / len(ari))
+    print('nmi: ', sum(nmi) / len(nmi))
+    print('homo: ', sum(homo) / len(homo))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

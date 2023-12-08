@@ -149,19 +149,18 @@ def evalArticleErrorScore(predArticleBlockDict,groundTruthArticleBlockDict):
     return AES,meanAES
 
 def evaluate(prediction, truth):
-    if len(prediction) < len(truth):
-        prediction = prediction + [[]]*(len(truth)-len(prediction))
-    else:
-        truth = truth + [[]]*(len(prediction)-len(truth))
-
+    correct_num = 0
     error_list = np.zeros((len(truth), len(prediction)))
     for truth_index, truth_value in enumerate(truth):
         for pre_index, pre_value in enumerate(prediction):
+            if set(truth_value) == set(pre_value):
+                correct_num += 1
+
             jiaoji = set(truth_value).intersection(pre_value)
             bingji = set(truth_value + pre_value)
             error_list[truth_index][pre_index] = len(bingji-jiaoji) / len(bingji)
 
+
     error_value_list = np.min(error_list, axis=1)
-    return error_value_list
-
-
+    return {'error_value_list': error_value_list,
+            'ppa': [correct_num / len(truth)]}
