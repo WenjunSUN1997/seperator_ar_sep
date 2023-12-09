@@ -23,7 +23,7 @@ def train(kwargs):
     loss_all = []
     for epoch_index in range(epoch_num):
         for step, data in tqdm(enumerate(train_dataloader), total=len(train_dataloader)):
-            break
+            # break
             output = model(data)
             loss = output['loss']
             loss_all.append(loss.item())
@@ -44,6 +44,7 @@ if __name__ == "__main__":
     parser.add_argument("--path", default='../../seperator_detection/result/')
     parser.add_argument("--max_token_num", default=512, type=int)
     parser.add_argument("--device", default='cuda:1')
+    parser.add_argument("--store_path", default='log/')
     parser.add_argument("--center_flag", action='store_true', default=True)
     parser.add_argument("--encoder_flag", action='store_true', default=True)
     parser.add_argument("--region_flag", action='store_true', default=True)

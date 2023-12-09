@@ -64,6 +64,7 @@ def analysis_link(point_0, point_1, tokenizer, model, config):
     return output_model
 
 def validate(config, model):
+    os.makedirs(config['store_path'], exist_ok=True)
     loss_all = []
     aer_list = []
     acr_list = []
@@ -74,7 +75,8 @@ def validate(config, model):
     file_path = '../seperator_detection/result/'
     tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
     file_name_list = os.listdir(file_path)
-    def analysis_single_page(predict_net):
+    def analysis_single_page(predict_net, image_to_draw, file_name):
+        drawer = ImageDraw.Draw(image_to_draw, 'RGB')
         edge_list = predict_net.edges()
         for edge in edge_list:
             point_0 = predict_net.nodes[edge[0]]
@@ -84,13 +86,21 @@ def validate(config, model):
             if result['path'] == 0:
                 predict_net.remove_edge(edge[0], edge[1])
 
+        edge_list = predict_net.edges()
+        for edge in edge_list:
+            point_0 = predict_net.nodes[edge[0]]
+            point_1 = predict_net.nodes[edge[1]]
+            drawer.line(point_0['center']+point_1['center'], 'red', width=10)
+
+        image_to_draw.save('log/'+file_name+'.png')
         return post_process_net(predict_net)
 
     for file_name in tqdm(file_name_list):
+        image_to_draw = Image.open('../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/' + file_name + '.jpg').convert('RGB')
         with open(file_path + file_name + '/' + 'nx.nx', 'rb') as file:
             predict_net = pickle.load(file)
 
-        performance = analysis_single_page(predict_net)
+        performance = analysis_single_page(predict_net, image_to_draw, file_name)
         aer_list = aer_list + performance['error_value_list']
         acr_list = acr_list + [1 - x for x in aer_list]
         ari += performance['ari']
