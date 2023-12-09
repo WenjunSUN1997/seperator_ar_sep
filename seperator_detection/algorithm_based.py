@@ -470,23 +470,29 @@ def split_link_by_name(image_path:str, save_path):
         groups.append(temp)
 
     for group_unit in groups:
-        group_unit = sorted(group_unit, key=lambda x: (x['center'][0] // 200, x['center'][1]))
+        group_unit = sorted(group_unit, key=lambda x: (x['center'][0] // 100, x['center'][1]))
         for index in range(len(group_unit) - 1):
             links.append([group_unit[index]['index'],
                           group_unit[index+1]['index']])
 
     for chuizhi_line_index in range(len(final_chuizhi_all)):
+        chuizhi_top_point = [final_chuizhi_all[chuizhi_line_index][0],
+                             final_chuizhi_all[chuizhi_line_index][1]]
+        chuizhi_bottom_point = [final_chuizhi_all[chuizhi_line_index][2],
+                             final_chuizhi_all[chuizhi_line_index][3]]
         left_block = [x for x in annotation_list
                       if x['sign'][1] == chuizhi_line_index]
         try:
-            mini_left = max(left_block, key=lambda x: x['center'][1])
+            mini_left = min(left_block, key=lambda x: (x['center'][0]-chuizhi_bottom_point[0]) ** 2
+                                                      + (x['center'][1]-chuizhi_bottom_point[1]) ** 2)
         except:
             continue
 
         right_block = [x for x in annotation_list
                        if x['sign'][0] == chuizhi_line_index]
         try:
-            mini_right = min(right_block, key=lambda x: x['center'][1])
+            mini_right = min(right_block, key=lambda x: (x['center'][0]-chuizhi_top_point[0]) ** 2
+                                                      + (x['center'][1]-chuizhi_top_point[1]) ** 2)
         except:
             continue
 
@@ -514,6 +520,7 @@ if __name__ == "__main__":
     image_path_list = [x for x in os.listdir('../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/')
                        if '.jpg' in x]
     for image_path in tqdm(image_path_list):
+        print(image_path)
         os.makedirs(save_path+image_path.replace('.jpg', '/'), exist_ok=True)
         try:
             split_link_by_name(image_path='../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/'+image_path,

@@ -8,7 +8,7 @@ class SepLinear(torch.nn.Module):
         self.region_flag = config['region_flag']
         self.encoder_flag = config['encoder_flag']
         self.model = AutoModel.from_pretrained(config['model_name'])
-        self.loss_func = torch.nn.CosineEmbeddingLoss()
+        self.loss_func = torch.nn.CrossEntropyLoss()
         self.drop_out = torch.nn.Dropout(p=config['drop_out'])
         self.activate = torch.nn.ReLU()
         self.normal = torch.nn.LayerNorm(self.model.config.hidden_size)
@@ -23,13 +23,13 @@ class SepLinear(torch.nn.Module):
                                               embedding_dim=self.model.config.hidden_size)
         self.y_embedding = torch.nn.Embedding(num_embeddings=501,
                                               embedding_dim=self.model.config.hidden_size)
-        self.top_embedding = torch.nn.Embedding(num_embeddings=10,
+        self.top_embedding = torch.nn.Embedding(num_embeddings=4000,
                                                 embedding_dim=self.model.config.hidden_size)
-        self.bottom_embedding = torch.nn.Embedding(num_embeddings=10,
+        self.bottom_embedding = torch.nn.Embedding(num_embeddings=4000,
                                                    embedding_dim=self.model.config.hidden_size)
-        self.left_embedding = torch.nn.Embedding(num_embeddings=10,
+        self.left_embedding = torch.nn.Embedding(num_embeddings=4000,
                                                  embedding_dim=self.model.config.hidden_size)
-        self.right_embedding = torch.nn.Embedding(num_embeddings=10,
+        self.right_embedding = torch.nn.Embedding(num_embeddings=4000,
                                                   embedding_dim=self.model.config.hidden_size)
 
     def __forward(self, data, index):
@@ -45,8 +45,19 @@ class SepLinear(torch.nn.Module):
         if self.encoder_flag:
             semantic = self.normal(torch.mean(self.encoder(semantic), dim=1))
 
+        if self.region_flag:
+            semantic = semantic + left_embedding + right_embedding + top_embedding + bottom_embedding
 
+        if self.center_flag:
+            semantic = semantic + x_embedding + y_embedding
+
+        return semantic
 
     def forward(self, data):
         first_semantic = self.__forward(data, index=0)
         second_semantic = self.__forward(data, index=1)
+        output_linear = self.linear(self.activate(torch.cat((first_semantic, second_semantic), dim=1)))
+        loss = self.loss_func(output_linear, data['label'])
+        path = torch.max(output_linear, dim=1).indices
+        return {'loss': loss,
+                'path': path}
