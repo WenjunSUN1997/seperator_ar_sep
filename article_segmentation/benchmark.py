@@ -55,7 +55,10 @@ def post_process_net(predict_net: nx.Graph):
             'nmi': nmi,
             'homo': homo,
             'error_value_list': error_value_list,
-            'ppa': ppa}
+            'ppa': ppa,
+            'p': evaluation_result['p'],
+            'r': evaluation_result['r'],
+            'f1': evaluation_result['f1']}
 
 
 def benchmark(file_path, tokenizer, model, threshold, type, device):
@@ -113,6 +116,9 @@ def benchmark(file_path, tokenizer, model, threshold, type, device):
     nmi = []
     homo = []
     ppa = []
+    p = []
+    r = []
+    f1 = []
 
     for file_name in tqdm(file_list):
         with open(file_path + file_name + '/' + 'nx.nx', 'rb') as file:
@@ -125,12 +131,18 @@ def benchmark(file_path, tokenizer, model, threshold, type, device):
         nmi += performance['nmi']
         homo += performance['homo']
         ppa += performance['ppa']
+        p += performance['p']
+        r += performance['r']
+        f1 += performance['f1']
 
     print('macs: ', sum(acr_list) / len(acr_list))
     print('ppa: ', sum(ppa) / len(ppa))
     print('ari: ', sum(ari) / len(ari))
     print('nmi: ', sum(nmi) / len(nmi))
     print('homo: ', sum(homo) / len(homo))
+    print('p: ', sum(p) / len(p))
+    print('r: ', sum(r) / len(r))
+    print('f1: ', sum(f1) / len(f1))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

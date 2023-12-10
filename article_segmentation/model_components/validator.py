@@ -1,7 +1,9 @@
 from PIL import Image, ImageDraw
 from article_segmentation.benchmark import *
+from tqdm import tqdm
 import os
 import torch
+import pickle
 from transformers import AutoTokenizer
 
 def analysis_link(point_0, point_1, tokenizer, model, config):
@@ -41,6 +43,7 @@ def analysis_link(point_0, point_1, tokenizer, model, config):
         label = torch.tensor([1]).to(config['device'])
     else:
         label = torch.tensor([0]).to(config['device'])
+
     input_dict = {'input_ids_0': output_tokenizer_0['input_ids'].unsqueeze(0),
                   'attention_mask_0': output_tokenizer_0['attention_mask'].unsqueeze(0),
                   'x_0': x_0,
@@ -60,12 +63,13 @@ def analysis_link(point_0, point_1, tokenizer, model, config):
                   'label': label}
     for key, value in input_dict.items():
         input_dict[key] = value.type(torch.int64)
+
     output_model = model(input_dict)
     return output_model
 
 def validate(config, model):
     os.makedirs(config['store_path'], exist_ok=True)
-    loss_all = []
+    loss_all = [0]
     aer_list = []
     acr_list = []
     ari = []
@@ -74,7 +78,9 @@ def validate(config, model):
     ppa = []
     file_path = '../seperator_detection/result/'
     tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
-    file_name_list = os.listdir(file_path)
+    with open('test_file', 'rb') as file:
+        file_name_list = pickle.load(file)
+
     def analysis_single_page(predict_net, image_to_draw, file_name):
         drawer = ImageDraw.Draw(image_to_draw, 'RGB')
         edge_list = predict_net.edges()
@@ -83,8 +89,11 @@ def validate(config, model):
             point_1 = predict_net.nodes[edge[1]]
             result = analysis_link(point_0, point_1, tokenizer, model, config)
             loss_all.append(result['loss'].item())
+            # if point_0['reading_order'] != point_1['reading_order']:
+            #     predict_net.remove_edge(edge[0], edge[1])
             if result['path'] == 0:
                 predict_net.remove_edge(edge[0], edge[1])
+                # print('remove')
 
         edge_list = predict_net.edges()
         for edge in edge_list:
@@ -113,6 +122,6 @@ def validate(config, model):
     print('ari: ', sum(ari) / len(ari))
     print('nmi: ', sum(nmi) / len(nmi))
     print('homo: ', sum(homo) / len(homo))
-    return loss_all
+    return sum(loss_all) / len(loss_all)
 
 

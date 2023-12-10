@@ -3,6 +3,8 @@ from transformers import AutoTokenizer
 import pickle
 import torch
 import os
+import pickle
+from collections import Counter
 
 class SepDateset(Dataset):
     def __init__(self,
@@ -15,19 +17,38 @@ class SepDateset(Dataset):
         self.data = self.organize_data(file_path)
         self.max_token_num = max_token_num
         self.device = device
+        self.weight = self.get_weight()
 
     def organize_data(self, file_path):
         result = []
-        file_name_list = os.listdir(file_path)
+        # file_name_list = os.listdir(file_path)
+        with open('train_file', 'rb') as file:
+            file_name_list = pickle.load(file)
         for file_name in file_name_list:
             with open(file_path + file_name + '/nx.nx', 'rb') as file:
                 predict_net = pickle.load(file)
 
             edge_list = predict_net.edges()
             for edge in edge_list:
-                result.append([predict_net.nodes[edge[0]], predict_net.nodes[edge[0]]])
+                result.append([predict_net.nodes[edge[0]], predict_net.nodes[edge[1]]])
 
         return result
+
+    def get_weight(self):
+        label_list = []
+        for data_unit in self.data:
+            if data_unit[0]['reading_order'] == data_unit[1]['reading_order']:
+                label_list.append(1)
+            else:
+                label_list.append(0)
+
+        element_counts = Counter(label_list)
+        total_elements = len(label_list)
+        element_percentages = {element: count / total_elements
+                               for element, count in element_counts.items()}
+        class_weights = {element: 1.0 / percentage
+                         for element, percentage in element_percentages.items()}
+        return torch.tensor([class_weights[x] for x in range(len(class_weights))]).to(self.device)
 
     def __len__(self):
         return len(self.data)
