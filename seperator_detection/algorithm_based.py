@@ -470,7 +470,7 @@ def split_link_by_name(image_path:str, save_path):
         groups.append(temp)
 
     for group_unit in groups:
-        group_unit = sorted(group_unit, key=lambda x: (x['center'][0] // 300, x['center'][1]))
+        group_unit = sorted(group_unit, key=lambda x: (x['center'][0] // 600, x['center'][1]))
         for index in range(len(group_unit) - 1):
             links.append([group_unit[index]['index'],
                           group_unit[index+1]['index']])
@@ -515,15 +515,15 @@ def split_link_by_name(image_path:str, save_path):
 
 if __name__ == "__main__":
     error = 0
-    save_path = 'result/'
+    save_path = 'result_fr/'
     os.makedirs(save_path, exist_ok=True)
-    image_path_list = [x for x in os.listdir('../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/')
+    image_path_list = [x for x in os.listdir('../article_dataset/AS_TrainingSet_BnF_NewsEye_v2/')
                        if '.jpg' in x]
     for image_path in tqdm(image_path_list):
         print(image_path)
         os.makedirs(save_path+image_path.replace('.jpg', '/'), exist_ok=True)
         try:
-            split_link_by_name(image_path='../article_dataset/AS_TrainingSet_NLF_NewsEye_v2/'+image_path,
+            split_link_by_name(image_path='../article_dataset/AS_TrainingSet_BnF_NewsEye_v2/'+image_path,
                                save_path=save_path+image_path.replace('.jpg', '/'))
         except:
             os.removedirs(save_path+image_path.replace('.jpg', '/'))

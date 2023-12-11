@@ -3,5 +3,6 @@ data/train_wikicity.csv
 article_dataset/*
 seperator_detection/sep_dataset/*
 seperator_detection/result/*
+seperator_detection/result_fr/*
 article_segmentation/ar_seg_dataset/*
 seperator_detection/F-Clip/logs/*

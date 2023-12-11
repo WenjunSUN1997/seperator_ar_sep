@@ -8,9 +8,14 @@ class SepLinear(torch.nn.Module):
         self.region_flag = config['region_flag']
         self.encoder_flag = config['encoder_flag']
         self.model = AutoModel.from_pretrained(config['model_name'])
-        self.loss_func = torch.nn.CrossEntropyLoss(weight=weight)
+        if config['weight']:
+            self.loss_func = torch.nn.CrossEntropyLoss(weight=weight)
+        else:
+            self.loss_func = torch.nn.CrossEntropyLoss()
+
         self.drop_out = torch.nn.Dropout(p=config['drop_out'])
         self.activate = torch.nn.ReLU()
+        self.device = config['device']
         self.normal = torch.nn.LayerNorm(self.model.config.hidden_size)
         self.linear = torch.nn.Linear(in_features=self.model.config.hidden_size,
                                       out_features=2)
@@ -76,17 +81,35 @@ class SepLinear(torch.nn.Module):
 
         return
 
+    def encoder_linear_forward(self, data):
+        first_semantic = self.__forward(data, index=0)
+        second_semantic = self.__forward(data, index=1)
+        temp = []
+        for batch_size in range(first_semantic.shape[0]):
+            pair_semantic = self.all_encoder(torch.cat((first_semantic[batch_size].unsqueeze(0),
+                                                        second_semantic[batch_size].unsqueeze(0)),
+                                                        dim=0))
+            temp.append(torch.mean(pair_semantic, dim=0))
+
+        all_semantic = torch.stack(temp)
+        output_linear = self.linear(self.activate(self.normal(all_semantic)))
+        loss = self.loss_func(output_linear, data['label'])
+        path = torch.max(output_linear, dim=1).indices
+        return {'loss': loss,
+                'path': path}
+
     def linear_forward(self, data):
         first_semantic = self.__forward(data, index=0)
         second_semantic = self.__forward(data, index=1)
-        output_linear = self.linear(self.activate(first_semantic-second_semantic))
+        output_linear = self.linear(self.activate(self.normal(torch.abs(first_semantic-second_semantic))))
         loss = self.loss_func(output_linear, data['label'])
         path = torch.max(output_linear, dim=1).indices
         return {'loss': loss,
                 'path': path}
 
     def forward(self, data):
-        return self.linear_forward(data)
+        return self.encoder_linear_forward(data)
+        # return self.linear_forward(data)
         # self.cnn_forward(data)
         # first_semantic = self.__forward(data, index=0)
         # second_semantic = self.__forward(data, index=1)

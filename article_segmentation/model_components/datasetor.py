@@ -11,8 +11,10 @@ class SepDateset(Dataset):
                  model_name='dbmdz/bert-base-historic-multilingual-cased',
                  device='cuda:1',
                  max_token_num=512,
-                 file_path='../../seperator_detection/result/'):
+                 file_path='../../seperator_detection/result/',
+                 lang='fi'):
         super(SepDateset, self).__init__()
+        self.lang = lang
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.data = self.organize_data(file_path)
         self.max_token_num = max_token_num
@@ -22,8 +24,13 @@ class SepDateset(Dataset):
     def organize_data(self, file_path):
         result = []
         # file_name_list = os.listdir(file_path)
-        with open('train_file', 'rb') as file:
-            file_name_list = pickle.load(file)
+        if self.lang == 'fi':
+            with open('train_file', 'rb') as file:
+                file_name_list = pickle.load(file)
+        else:
+            with open('train_file_fr', 'rb') as file:
+                file_name_list = pickle.load(file)
+
         for file_name in file_name_list:
             with open(file_path + file_name + '/nx.nx', 'rb') as file:
                 predict_net = pickle.load(file)
