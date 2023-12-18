@@ -53,13 +53,6 @@ def train(kwargs):
     return
 
 if __name__ == "__main__":
-    # file_name = os.listdir('../seperator_detection/result_fr/')
-    # train_file = file_name[:int(0.8*len(file_name))]
-    # with open('train_file_fr', 'wb') as file:
-    #     pickle.dump(train_file, file)
-    # test_file = file_name[int(0.8*len(file_name)):]
-    # with open('test_file_fr', 'wb') as file:
-    #     pickle.dump(test_file, file)
     parser = argparse.ArgumentParser()
     parser.add_argument("--lang", default='fi', choices=['fr', 'fi'])
     parser.add_argument("--model_name", default='dbmdz/bert-base-historic-multilingual-64k-td-cased')
