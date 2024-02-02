@@ -19,6 +19,8 @@ class SepLinear(torch.nn.Module):
         self.normal = torch.nn.LayerNorm(self.model.config.hidden_size)
         self.linear = torch.nn.Linear(in_features=self.model.config.hidden_size,
                                       out_features=2)
+        self.linear_sota = torch.nn.Linear(in_features=self.model.config.hidden_size*3,
+                                           out_features=2)
         self.cnn = torch.nn.Conv2d(in_channels=1,
                                    out_channels=1,
                                    kernel_size=(2, self.model.config.hidden_size),
@@ -101,7 +103,8 @@ class SepLinear(torch.nn.Module):
     def linear_forward(self, data):
         first_semantic = self.__forward(data, index=0)
         second_semantic = self.__forward(data, index=1)
-        output_linear = self.linear(self.activate(self.normal(torch.abs(first_semantic-second_semantic))))
+        all_semantic = torch.cat([first_semantic, second_semantic, torch.abs(first_semantic-second_semantic)])
+        output_linear = self.linear(self.activate(self.normal(all_semantic)))
         loss = self.loss_func(output_linear, data['label'])
         path = torch.max(output_linear, dim=1).indices
         return {'loss': loss,
@@ -109,7 +112,7 @@ class SepLinear(torch.nn.Module):
 
     def forward(self, data):
         return self.encoder_linear_forward(data)
-        # return self.linear_forward(data)
+        #return self.linear_forward(data)
         # self.cnn_forward(data)
         # first_semantic = self.__forward(data, index=0)
         # second_semantic = self.__forward(data, index=1)
