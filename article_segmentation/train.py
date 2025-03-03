@@ -31,7 +31,7 @@ def train(kwargs):
     scheduler = ReduceLROnPlateau(optimizer,
                                   mode='min',
                                   factor=0.5,
-                                  patience=1,
+                                  patience=2,
                                   verbose=True)
     loss_all = [0]
     for epoch_index in range(epoch_num):
